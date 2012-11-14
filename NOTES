@@ -3,6 +3,7 @@
 using matplotlib without $DISPLAY
 
 I edited the matplotlibrc file that lives in "/home/vagrant/.matplotlib/matplotlibrc"
+use backend: Agg
 
 another option is to use in each file 
 import matplotlib as mpl

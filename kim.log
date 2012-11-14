@@ -1,8 +1,0 @@
-* Info (KIM_API_model::is_it_match): The following descriptor file line may not match with test_iron_pair_potential__MO_973548720770_000's descriptor file.
-OneBasedLists flag none [] 
-
-* Info (KIM_API_model::is_it_match): The following descriptor file line may not match with iron_pair_potential__MO_973548720770_000's descriptor file.
-ZeroBasedLists flag none [] 
-
-* Info: KIM_API_model::model_init: call dynamically linked initialize routine for:iron_pair_potential__MO_973548720770_000
-               from the shared library:/home/vagrant/openkim-repository/mo//iron_pair_potential__MO_973548720770_000/iron_pair_potential__MO_973548720770_000.so

@@ -56,6 +56,7 @@ def sweepSurfaces(calc):
             surfaceEnergyDict['Surface Energy ' +str(miller)] = E_relaxed
             energies.append(E_relaxed)   
         except TimeoutException:
+            list_of_indices.remove(miller)
             print "surface took too long, skipping", miller
         signal.alarm(0)     
     return list_of_indices, np.array(energies), surfaceEnergyDict, calcTime
