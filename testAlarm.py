@@ -28,13 +28,13 @@ while boo:
         break
 signal.alarm(0)
 
-signal.signal(signal.SIGALRM,handler2)
-signal.alarm(3)
+#signal.signal(signal.SIGALRM,handler2)
+#signal.alarm(3)
 #while boo:
 #    print "running again"
-signal.alarm(0)
+#signal.alarm(0)
 
-while boo:
-    print "proof there's no alarm"
-
-print "test finished"
+#while boo:
+#    print "proof there's no alarm"
+#
+#print "test finished"

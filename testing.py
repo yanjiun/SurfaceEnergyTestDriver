@@ -26,12 +26,13 @@ def sweepSurfaces(calc):
 
     surfaceEnergyDict = {}
     energies=[]
+    skipped_indices=[]
     indices_calculated=[]
     file = open('IndexList.pkl','r')
     list_of_indices = pickle.load(file)
     file.close()
     # list of indices for testing
-    #list_of_indices = [[1,1,1],[1,0,0],[1,2,1],[1,1,0],[1,8,9],[2,5,7]]
+    list_of_indices = [[1,0,0],[1,1,1],[1,2,1],[1,1,0],[1,8,9]]
     latticeconstant = findLatticeConstant(calc)
     atoms = bulk(symbol,lattice,a=latticeconstant)
     atoms.set_calculator(calc)
@@ -48,11 +49,12 @@ def sweepSurfaces(calc):
         miller = [1,0,0]
     else:
         miller = [1,0,0]
-    E_unrelaxed, E_relaxed = getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant)
+    #E_unrelaxed, E_relaxed = getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant)
     signal.alarm(0)
     end_time = time.time()
     calcTime = end_time - start_time
 
+    counter = 0
     signal.signal(signal.SIGALRM, handler2)
     for miller in list_of_indices:
         signal.alarm(TIME_CUTOFF)
@@ -60,14 +62,15 @@ def sweepSurfaces(calc):
             print miller
             E_unrelaxed, E_relaxed = getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant)
             surfaceEnergyDict['Surface Energy ' +str(miller)] = E_relaxed
-            energies.append(E_relaxed)
-            indices_calculated.append(miller)   
+            energies.append(E_relaxed) 
+            indices_calculated.append(miller)
         except TimeoutException:
+            skipped_indices.append(miller)
             print "surface took too long, skipping", miller
         except:
             raise
-        signal.alarm(0)     
-    return indices_calculated, np.array(energies), surfaceEnergyDict, calcTime
+        signal.alarm(0)
+    return indices_calculated, np.array(energies), surfaceEnergyDict, calcTime 
 
 def getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant):
     
@@ -109,13 +112,11 @@ def plotBrokenBondFit(indices,energies,bfparams,correction=1):
     plotindices, plotenergies = expandList(indices,energies)
     plotSubSet(plotindices,plotenergies,[1,-1,0],[1,1,0],bfparams,correction=correction)
     pylab.savefig('BrokenBondFit1-10.png')
-    pylab.clf()
     plotSubSet(plotindices,plotenergies,[1,-1,2],[1,1,0],bfparams,correction=correction)
     pylab.savefig('BrokenBondFit1-12.png')
-    pylab.clf()
     plotSubSet(plotindices,plotenergies,[1,1,-1],[0,1,1],bfparams,correction=correction)
     pylab.savefig('BrokenBondFit11-1.png')
-    pylab.clf()
+
 
 def findLatticeConstant(calc):
     """
@@ -177,7 +178,7 @@ class TimeoutException(Exception):
 
 calc = KIMCalculator(model)
 print "calculator established"
-indices, energies, surfaceEnergyDict, calcTime = sweepSurfaces(calc)
+indices, energies, surfaceEnergyDict, calcTime  = sweepSurfaces(calc)
 print "surfaces swept"
 if len(indices)>=4:
     bfparams, range_error, max_error = fitBrokenBond(indices, energies)
@@ -191,7 +192,7 @@ else:
     range_error = None
     max_error = None
     subbfparams = None
-    subrange=None
+    subrange = None
     submax_error = None
 
 # dump all the stuff we calculated into one large dictionary
@@ -210,7 +211,7 @@ if bfparams!=None:
         }
 else:
     resultsFirstHalf = {"calculationTimeForTestSurface":calcTime,\
-         "message from test":"not enough surface energy results for fit"}
+                        "message from test":"not enough surface energy results for fit"}
 
 results = dict(resultsFirstHalf.items()+surfaceEnergyDict.items())
 print simplejson.dumps(results)
