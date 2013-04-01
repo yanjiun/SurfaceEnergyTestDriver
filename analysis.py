@@ -267,20 +267,20 @@ def fitEnergiesFromFile(fileName, n=2, p0=[0.1,-0.2,0.01],correction=0, fit_unre
 
     indices = np.array(indices)
 
-    bfparams, cov_x, cost, range, max_error = fitSurfaceEnergies(indices,e_relaxed,n=n,p0=p0,correction=correction) 
+    bfparams, cov_x, cost, error_range, max_error = fitSurfaceEnergies(indices,e_relaxed,n=n,p0=p0,correction=correction) 
        
     plotSubSet(indices,e_relaxed,[1,-1,0],[1,1,0],bfparams,correction=correction)     
     plotSubSet(indices,e_relaxed,[1,-1,2],[1,1,0],bfparams,correction=correction)
     plotSubSet(indices,e_relaxed,[1,1,-1],[0,1,1],bfparams,correction=correction)
 
-    output_rel = (bfparams, cov_x, cost, range, max_error)
+    output_rel = (bfparams, cov_x, cost, error_range, max_error)
 
     if fit_unrelaxed:           
-        bfparams, cov_x, cost, range, max_error = fitSurfaceEnergies(indices,e_unrelaxed,n=n,p0=p0,correction=correction)
+        bfparams, cov_x, cost, error_range, max_error = fitSurfaceEnergies(indices,e_unrelaxed,n=n,p0=p0,correction=correction)
         plotSubSet(indices,e_unrelaxed,[1,-1,0],[1,1,0],bfparams,correction=correction)
         plotSubSet(indices,e_unrelaxed,[1,-1,2],[1,1,0],bfparams,correction=correction)
         plotSubSet(indices,e_unrelaxed,[1,1,-1],[0,1,1],bfparams,correction=correction)
-        output_unrel = (bfparams, cov_x, cost, range, max_error)
+        output_unrel = (bfparams, cov_x, cost, error_range, max_error)
         return output_rel, output_unrel
     else:
         return output_rel
@@ -295,10 +295,10 @@ def fitSurfaceEnergies(indices,energies,n=2,p0=[0.1,-0.2,0.01],correction=0):
     cost = numpy.sum(abs(residual(bfparams,indices,energies,correction)/energies))/len(indices)
     min_e = numpy.min(energies)
     max_e = numpy.max(energies)
-    range = numpy.sum(abs(residual(bfparams,indices,energies,correction)/(max_e-min_e)))/len(indices)
+    error_range = numpy.sum(abs(residual(bfparams,indices,energies,correction)/(max_e-min_e)))/len(indices)
     max_error = max(abs(residual(bfparams,indices,energies,correction))/energies)
 
-    return bfparams, cov_x, cost, range, max_error
+    return bfparams, cov_x, cost, error_range, max_error
 
 
 def setPlotOptions(labelsize=20,tickmajor=20,tickminor=10,markersize=10,legendsize=20,legendspacing=1.5,labelsizexy=16):

@@ -31,7 +31,7 @@ def sweepSurfaces(calc):
     list_of_indices = pickle.load(file)
     file.close()
     # list of indices for testing
-    #list_of_indices = [[1,1,1],[1,0,0],[1,2,1],[1,1,0],[1,8,9],[2,5,7]]
+    list_of_indices = [[1,1,1],[1,0,0],[1,2,1],[1,1,0],[1,8,9],[2,5,7]]
     latticeconstant = findLatticeConstant(calc)
     atoms = bulk(symbol,lattice,a=latticeconstant)
     atoms.set_calculator(calc)
@@ -85,9 +85,9 @@ def fitBrokenBond(indices, energies, n=3, p0=[0.1,0.1,0.01,0.0],correction=1):
 
     indices = np.array(indices)
     
-    bfparams, cov_x, cost, range, max_error = fitSurfaceEnergies(indices,energies,n=n,p0=p0,correction=correction)     
+    bfparams, cov_x, cost, range_error, max_error = fitSurfaceEnergies(indices,energies,n=n,p0=p0,correction=correction)     
 
-    return bfparams, range, max_error
+    return bfparams, range_error, max_error
 
 def fitSubSetBrokenBond(sample_indices,indices,energies,n=3,p0=[0.1,0.1,0.01,0.0],correction=1):
     
@@ -99,9 +99,9 @@ def fitSubSetBrokenBond(sample_indices,indices,energies,n=3,p0=[0.1,0.1,0.01,0.0
         curr_index = expandedIndices.index(ind)
         sample_energies.append(expandedEnergies[curr_index])
  
-    bfparams, range, max_error = fitBrokenBond(sample_indices, sample_energies, n=n, p0 = p0,correction=correction)
+    bfparams, range_error, max_error = fitBrokenBond(sample_indices, sample_energies, n=n, p0 = p0,correction=correction)
 
-    return bfparams, range, max_error
+    return bfparams, range_error, max_error
 
 def plotBrokenBondFit(indices,energies,bfparams,correction=1):
    
