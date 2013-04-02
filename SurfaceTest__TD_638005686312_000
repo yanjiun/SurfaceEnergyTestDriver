@@ -31,7 +31,7 @@ def sweepSurfaces(calc):
     list_of_indices = pickle.load(file)
     file.close()
     # list of indices for testing
-    list_of_indices = [[1,1,1],[1,0,0],[1,2,1],[1,1,0],[1,8,9],[2,5,7]]
+    #list_of_indices = [[1,1,1],[1,0,0],[1,2,1],[1,1,0],[1,8,9],[2,5,7]]
     latticeconstant = findLatticeConstant(calc)
     atoms = bulk(symbol,lattice,a=latticeconstant)
     atoms.set_calculator(calc)
