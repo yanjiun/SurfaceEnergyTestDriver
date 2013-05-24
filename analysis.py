@@ -9,13 +9,14 @@ from ase import Atoms
 from scipy.special import sph_harm
 
 # this is to analyze the surface energies
+# 12-11-2012: put in bcc terms also and fit them...
 
-def energyVsAngle(file,index0,poleaxis):
+def energyVsAngle(fileName,index0,poleaxis):
     """
     plots calculated surfaces choosing family of planes perpendicular to index0, and as function of angle to poleaxis
     """
 
-    f = open(file,'r')
+    f = open(fileName,'r')
 
     for line in f.readlines()[3:]:
         index, e_unrelaxed, e_relaxed, cell_size = line.split('\t')
@@ -31,19 +32,19 @@ def energyVsAngle(file,index0,poleaxis):
             pylab.plot(angle,e_unrelaxed,'r.')
             pylab.plot(angle,e_relaxed,'g.')
 
-    fileNameHeader = file.split('.')[0] + 'index_'+str(index0)
+    fileNameHeader = fileName.split('.')[0] + 'index_'+str(index0)
 
     pylab.savefig(fileNameHeader+'plot.png')
 
     pylab.show()
 
-def negativeEnergySurface(file):
+def negativeEnergySurface(fileName):
     """
     returns which surfaces are negative in energy as a list
     """ 
     surfaces = []
     
-    f = open(file,'r')
+    f = open(fileName,'r')
 
     for line in f.readlines()[3:]:
         index, e_unrelaxed, e_relaxed, cell_size = line.split()
@@ -149,8 +150,8 @@ def loadFileIntoLists(fileName):
     rel_es = []
     sizes = []
 
-    for line in f.readlines()[3:]:
-        index, e_unrelaxed, e_relaxed, cell_size = line.split()
+    for line in f.readlines()[2:]:
+        index, e_unrelaxed, e_relaxed, cell_size = line.split('\t')
         e_unrelaxed = float(e_unrelaxed)
         e_relaxed = float(e_relaxed)
         h = int(index.split(',')[0].strip('['))
@@ -166,11 +167,7 @@ def loadFileIntoLists(fileName):
 
     return indices, unrel_es, rel_es, sizes
 
-def term(nvector,n,p):
-    """
-    this is function for finding the n'th term in the broken-bond model 
-    for a given parameter vector and for a given direction for the fcc crystal
-    """
+def normalizedVector(nvector):
     if isinstance(nvector,numpy.ndarray):
         # normalize nvector
         x = nvector[:,0]/numpy.sqrt(numpy.sum(nvector**2,axis=1))
@@ -188,45 +185,92 @@ def term(nvector,n,p):
             print "index too long"
     else:
         print "index not list or numpy array, please change"
-    #normalize nvector
-    #print x, y, z
-    if (n==0):
-        return p*4* (abs(x+y) + abs(x-y) + abs(x+z) + abs(x-z) + abs(z+y) + abs(z-y))
-    elif (n==1):
-        return p*8*(abs(x)+abs(y)+abs(z))
-    elif (n==2):
-        return p*(abs(x+2*y+z) + abs(x+2*y-z) +abs(x-2*y+z) +abs(x-2*y-z) \
+
+    return x, y, z
+
+def term110(nvector,p):
+    """
+    this is function for the 110 neighbor term in the broken-bond model 
+    for a given parameter vector and for a given direction
+    """
+    x, y, z = normalizedVector(nvector)
+    return p*4* (abs(x+y) + abs(x-y) + abs(x+z) + abs(x-z) + abs(z+y) + abs(z-y))
+    
+def term100(nvector,p):
+    x, y, z = normalizedVector(nvector)
+    return p*8*(abs(x) + abs(y) + abs(z))
+    
+def term112(nvector,p):
+    x, y, z = normalizedVector(nvector)
+    return p*(abs(x+2*y+z) + abs(x+2*y-z) +abs(x-2*y+z) +abs(x-2*y-z) \
                        + abs(2*x+y+z) +abs(2*x+y-z) +abs(2*x-y+z) +abs(2*x-y-z)\
                        + abs(x+y+2*z) +abs(x+y-2*z) +abs(x-y+2*z) +abs(x-y-2*z))
-    else:
-        assert (n==3)
-        return p*6*(abs(x+y+z)+abs(x-y-z)+abs(x-y+z)+abs(x+y-z))
+    
+def term111(nvector,p):
+    x, y, z = normalizedVector(nvector)
+    return p*6*(abs(x+y+z) + abs(x-y-z) + abs(x-y+z) + abs(x+y-z))
 
+def term130(nvector,p):
+    x, y, z = normalizedVector(nvector)
+    return p*2*(abs(x+3*y) + abs(x-3*y) + abs(y+3*z) + abs(y-3*z) + abs(3*x+y) \
+                + abs(3*x-y) + abs(3*x+z) + abs(3*x-z) + abs(3*y+z) + abs(3*y-z)\
+                + abs(x+3*z) + abs(x-3*z))
 
-def fitFunction(nvector,p,correction):
-    #print "len(p) = ",len(p)
-    # correction is n
+def term113(nvector,p):
+    x, y, z = normalizedVector(nvector)
+    return 2*p*(abs(x+3*y+z) + abs(x+3*y-z) + abs(x-3*y+z) +abs(x-3*y-z) \
+                + abs(3*x+y+z) + abs(3*x-y+z) + abs(3*x+y-z) + abs(3*x-y-z)\
+                + abs(x+y+3*z) + abs(x-y+3*z) + abs(x+y-3*z) + abs(x-y-3*z))
+
+def fitFunction(nvector,p,correction,structure):
+    """
+    this returns the fit function for either an fcc or bcc structure
+    """
     if correction:
         if (len(p)==1+correction):
-            return term(nvector,0,p[0]) + corrections(nvector,p[1:])
+            if structure == "fcc":
+                return term110(nvector,p[0]) + corrections(nvector,p[1:])
+            elif structure == "bcc":
+                return term111(nvector,p[0]) + corrections(nvector,p[1:])
         elif (len(p)==2+correction):
-            return term(nvector,0,p[0]) + term(nvector,1,p[1])+corrections(nvector,p[2:])
+            if structure == "fcc":
+                return term110(nvector,p[0]) + term100(nvector,p[1])+corrections(nvector,p[2:])
+            elif structure == "bcc":
+                return term111(nvector,p[0]) + term100(nvector,p[1])+corrections(nvector,p[2:])
         elif (len(p)==3+correction):
-            return term(nvector,0,p[0]) + term(nvector,1,p[1]) + term(nvector,2,p[2])+corrections(nvector,p[3:])
+            if structure == "fcc":
+                return term110(nvector,p[0]) + term100(nvector,p[1]) + term112(nvector,p[2]) + corrections(nvector,p[3:])
+            elif structure == "bcc":
+                return term111(nvector,p[0]) + term100(nvector,p[1]) + term110(nvector,p[2]) + corrections(nvector,p[3:])
         elif (len(p)==4+correction):
-            return term(nvector,0,p[0]) + term(nvector,1,p[1]) + term(nvector,2,p[2])+term(nvector,3,p[3])+corrections(nvector,p[4:])
+            if structure == "fcc":
+                return term110(nvector,p[0]) + term100(nvector,p[1]) + term112(nvector,p[2])+term130(nvector,p[3]) + corrections(nvector,p[4:])
+            elif structure == "bcc":
+                return term111(nvector,p[0]) + term100(nvector,p[1]) + term110(nvector,p[2]) + term113(nvector,p[3]) + corrections(nvector,p[4:])
         else:
-            print "wrong number of parameters specified for fit for the fcc crystal"
+            print "wrong number of parameters specified for fit"
             raise Exception
     else:
-        if (len(p)==1):
-            return term(nvector,0,p)
+        if (len(p) ==1):
+            if structure == "fcc":
+                return term110(nvector,p[0]) 
+            elif structure == "bcc":
+                return term111(nvector,p[0])
         elif (len(p)==2):
-            return term(nvector,0,p[0]) + term(nvector,1,p[1])
+            if structure == "fcc":
+                return term110(nvector,p[0]) + term100(nvector,p[1])
+            elif structure == "bcc":
+                return term111(nvector,p[0]) + term100(nvector,p[1])
         elif (len(p)==3):
-            return term(nvector,0,p[0]) + term(nvector,1,p[1]) + term(nvector,2,p[2])
+            if structure == "fcc":
+                return term110(nvector,p[0]) + term100(nvector,p[1]) + term112(nvector,p[2])
+            elif structure == "bcc":
+                return term111(nvector,p[0]) + term100(nvector,p[1]) + term110(nvector,p[2])
         elif (len(p)==4):
-            return term(nvector,0,p[0]) + term(nvector,1,p[1]) + term(nvector,2,p[2]) + term(nvector,3,p[3])
+            if structure == "fcc":
+                return term110(nvector,p[0]) + term100(nvector,p[1]) + term112(nvector,p[2])+term130(nvector,p[3])
+            elif structure == "bcc":
+                return term111(nvector,p[0]) + term100(nvector,p[1]) + term110(nvector,p[2]) + term113(nvector,p[3])
         else:
             print "wrong number of parameters specified for fit"
             raise Exception
@@ -254,49 +298,53 @@ def corrections(nvector,c):
     if len(c) == 1: 
         return c[0]
     elif len(c) == 3:
-        return c[0]+c[1]*(x**4.+y**4.+z**4.)+c[2]*(x**2.*y**2.+y**2.*z**2.+x**2.*z**2.)
+        return c[0]+c[1]*(x**4.+y**4.+z**4.)+c[2]*(x**2.*y**2.+y**2.*z**2.+x**2.*z**2.) 
+    elif len(c) == 4:
+        # this return is to mimic the step-step interaction for fcc surfaces
+        return c[0]+c[1]*term110(nvector,1.)**3.+c[2]*term100(nvector,1.)**3.+c[3]*term112(nvector,1.)**3.
     else:
         print "wrong number of corrections specified"
         raise Exception
     #return abs(c[0]*sph_harm(0,0,theta,phi)+c[1]*sph_harm(-4,4,theta,phi)+c[2]*sph_harm(0,4,theta,phi)+c[3]*sph_harm(4,4,theta,phi))
 
 
-def fitEnergiesFromFile(fileName, n=2, p0=[0.1,-0.2,0.01],correction=0, fit_unrelaxed=True):    
+def fitEnergiesFromFile(fileName, structure='fcc',n=2, p0=[0.1,-0.2,0.01],correction=0, fit_unrelaxed=True):    
 
     indices, e_unrelaxed, e_relaxed, sizes = loadFileIntoLists(fileName)
 
     indices = np.array(indices)
 
-    bfparams, cov_x, cost, error_range, max_error = fitSurfaceEnergies(indices,e_relaxed,n=n,p0=p0,correction=correction) 
+    bfparams, cov_x, cost, error_range, max_error = fitSurfaceEnergies(indices,e_relaxed,structure,n=n,p0=p0,correction=correction) 
        
-    plotSubSet(indices,e_relaxed,[1,-1,0],[1,1,0],bfparams,correction=correction)     
-    plotSubSet(indices,e_relaxed,[1,-1,2],[1,1,0],bfparams,correction=correction)
-    plotSubSet(indices,e_relaxed,[1,1,-1],[0,1,1],bfparams,correction=correction)
+    plotSubSet(indices,e_relaxed,[1,-1,0],[1,1,0],bfparams,structure=structure,correction=correction)     
+    plotSubSet(indices,e_relaxed,[1,-1,2],[1,1,0],bfparams,structure=structure,correction=correction)
+    plotSubSet(indices,e_relaxed,[1,1,-1],[0,1,1],bfparams,structure=structure,correction=correction)
 
     output_rel = (bfparams, cov_x, cost, error_range, max_error)
 
     if fit_unrelaxed:           
-        bfparams, cov_x, cost, error_range, max_error = fitSurfaceEnergies(indices,e_unrelaxed,n=n,p0=p0,correction=correction)
-        plotSubSet(indices,e_unrelaxed,[1,-1,0],[1,1,0],bfparams,correction=correction)
-        plotSubSet(indices,e_unrelaxed,[1,-1,2],[1,1,0],bfparams,correction=correction)
-        plotSubSet(indices,e_unrelaxed,[1,1,-1],[0,1,1],bfparams,correction=correction)
+        bfparams, cov_x, cost, error_range, max_error = fitSurfaceEnergies(indices,e_unrelaxed,structure=structure,n=n,p0=p0,correction=correction)
+        plotSubSet(indices,e_unrelaxed,[1,-1,0],[1,1,0],bfparams,structure=structure,correction=correction)
+        plotSubSet(indices,e_unrelaxed,[1,-1,2],[1,1,0],bfparams,structure=structure,correction=correction)
+        plotSubSet(indices,e_unrelaxed,[1,1,-1],[0,1,1],bfparams,structure=structure,correction=correction)
         output_unrel = (bfparams, cov_x, cost, error_range, max_error)
         return output_rel, output_unrel
     else:
         return output_rel
 
 
-def fitSurfaceEnergies(indices,energies,n=2,p0=[0.1,-0.2,0.01],correction=0):
+def fitSurfaceEnergies(indices,energies,structure,n=2,p0=[0.1,-0.2,0.01],correction=0):
     """
     this is to do a fit of all the indices in the file
     n is to set up to which neighbor...
     """
-    bfparams, cov_x, output, mesg, ier= leastsq(residual,p0[0:n+correction],args=(indices,energies,correction),full_output=True)
-    cost = numpy.sum(abs(residual(bfparams,indices,energies,correction)/energies))/len(indices)
+    bfparams, cov_x, output, mesg, ier= leastsq(residual,p0[0:n+correction],args=(indices,energies,correction,structure),full_output=True)
+    cost = numpy.sum(abs(residual(bfparams,indices,energies,correction,structure)/energies))/len(indices)
     min_e = numpy.min(energies)
     max_e = numpy.max(energies)
-    error_range = numpy.sum(abs(residual(bfparams,indices,energies,correction)/(max_e-min_e)))/len(indices)
-    max_error = max(abs(residual(bfparams,indices,energies,correction))/energies)
+    error_range = numpy.sum(abs(residual(bfparams,indices,energies,correction,structure)/(max_e-min_e)))/len(indices)
+
+    max_error = max(abs(residual(bfparams,indices,energies,correction,structure))/energies)
 
     return bfparams, cov_x, cost, error_range, max_error
 
@@ -320,7 +368,7 @@ def setPlotOptions(labelsize=20,tickmajor=20,tickminor=10,markersize=10,legendsi
                                })
 
 
-def plotSubSet(indices, energies,index0,poleaxis,params,correction=0):
+def plotSubSet(indices, energies,index0,poleaxis,params,structure='fcc',correction=0):
     """
     make plot of a crystallographic zone index0    
     """
@@ -330,6 +378,7 @@ def plotSubSet(indices, energies,index0,poleaxis,params,correction=0):
     angles_dict={}
     selected_energies = []
     selected_indices = []
+    other_dict = {}
 
     for i in range(0,len(indices)):
         index = indices[i]
@@ -344,6 +393,8 @@ def plotSubSet(indices, energies,index0,poleaxis,params,correction=0):
             angles.append(angle)
             angles_dict[angle]=list(n_vector)    
             selected_energies.append(energy)
+            if energy > 0.0581: # temp for sorting out which energy to calculate
+                other_dict[str([h,k,l])] = (angle, energy)
     # sort the fit_indices by angle, so that we can connect lines
     angles = sorted(angles_dict.keys())
     sorted_e=[]
@@ -354,10 +405,11 @@ def plotSubSet(indices, energies,index0,poleaxis,params,correction=0):
         n_vector=angles_dict[angle]
         listindex=selected_fit_indices.index(n_vector)
         sorted_e.append(selected_energies[listindex])
-        fit_e.append(fitFunction(n_vector,params,correction))
-        residuals.append(residual(params,n_vector,selected_energies[listindex],correction))
+        fit_e.append(fitFunction(n_vector,params,correction,structure))
+        residuals.append(residual(params,n_vector,selected_energies[listindex],correction,structure))
+        residuals.append(residual(params,n_vector,selected_energies[listindex],correction,structure))
         #corrs.append(corrections(n_vector,params[3:]))   
- 
+
     pylab.figure()
     pylab.plot(angles,sorted_e,'bo',label='data')    
     pylab.plot(angles,fit_e,'r-',label='fit')
@@ -370,12 +422,12 @@ def plotSubSet(indices, energies,index0,poleaxis,params,correction=0):
     #pylab.figure()
     #pylab.plot(angles,corrs)
 
-    pylab.show() 
+    #pylab.show() 
 
-    return selected_indices
-    #return angles_dict
+    #return selected_indices
+    return other_dict
 
-def fitSubset(fileName,index0,poleaxis,n=2,p0=[0.1,-0.2,0.01],correction=0):
+def fitSubset(fileName,index0,poleaxis,structure='fcc',n=2,p0=[0.1,-0.2,0.01],correction=0):
     """
     to fit a subset of 
     surfaces perpendicular to index0
@@ -409,31 +461,31 @@ def fitSubset(fileName,index0,poleaxis,n=2,p0=[0.1,-0.2,0.01],correction=0):
     # somehow sort the fit_indices by angle
     selected_fit_indices = numpy.array(selected_fit_indices)
             
-    output = leastsq(residual,p0[0:n+correction],args=(selected_fit_indices,selected_e_unrel,correction),full_output=True)
-    output2 = leastsq(residual, p0[0:n+correction], args=(selected_fit_indices,selected_e_rel,correction),full_output=True)
+    output = leastsq(residual,p0[0:n+correction],args=(selected_fit_indices,selected_e_unrel,correction,structure),full_output=True)
+    output2 = leastsq(residual, p0[0:n+correction], args=(selected_fit_indices,selected_e_rel,correction,structure),full_output=True)
 
     bfparams = output[0]
     bfparamsrel = output2[0]
 
-    cost = numpy.sum(abs(residual(bfparamsrel,selected_fit_indices,selected_e_rel,correction))/selected_e_rel)/len(selected_fit_indices)
+    cost = numpy.sum(abs(residual(bfparamsrel,selected_fit_indices,selected_e_rel,correction,structure))/selected_e_rel)/len(selected_fit_indices)
     min_e = numpy.min(selected_e_rel)
     max_e = numpy.max(selected_e_rel)
-    perc_range = numpy.sum(abs(residual(bfparamsrel,selected_fit_indices,selected_e_rel,correction)/(max_e-min_e)))/len(selected_fit_indices)
+    perc_range = numpy.sum(abs(residual(bfparamsrel,selected_fit_indices,selected_e_rel,correction,structure)/(max_e-min_e)))/len(selected_fit_indices)
 
     pylab.figure()
     #pylab.plot(angles,selected_e_unrel,'bo')
-    #pylab.plot(angles,fitFunction(selected_fit_indices,bfparams,correction),'r+')
+    #pylab.plot(angles,fitFunction(selected_fit_indices,bfparams,correction,structure),'r+')
     pylab.plot(angles,selected_e_rel,'k+')
-    pylab.plot(angles,fitFunction(selected_fit_indices,bfparamsrel,correction),'g^')
+    pylab.plot(angles,fitFunction(selected_fit_indices,bfparamsrel,correction,structure),'g^')
     pylab.figure()
-    #pylab.plot(angles,residual(bfparams,selected_fit_indices,selected_e_unrel,correction)/selected_e_unrel,'r^')
-    pylab.plot(angles,residual(bfparamsrel,selected_fit_indices,selected_e_rel,correction)/selected_e_rel,'k^')    
+    #pylab.plot(angles,residual(bfparams,selected_fit_indices,selected_e_unrel,correction,structure)/selected_e_unrel,'r^')
+    pylab.plot(angles,residual(bfparamsrel,selected_fit_indices,selected_e_rel,correction,structure)/selected_e_rel,'k^')    
 
     #return bfparams, bfparamsrel
     return bfparamsrel, angles, selected_fit_indices
     #return bfparamsrel, cost, perc_range
     
-def residualFuncAngle(fileName,bfparams,index0,poleaxis,correction=0):
+def residualFuncAngle(fileName,bfparams,index0,poleaxis,structure='fcc',correction=0):
 
     indices, e_unrelaxed, e_relaxed, sizes = loadFileIntoLists(fileName)
 
@@ -469,9 +521,9 @@ def residualFuncAngle(fileName,bfparams,index0,poleaxis,correction=0):
     selected_e_rel = numpy.array(selected_e_rel)
 
     pylab.figure()
-    pylab.plot(angle_from_min, residual(bfparams,selected_fit_indices,selected_e_rel,correction),'bo')
+    pylab.plot(angle_from_min, residual(bfparams,selected_fit_indices,selected_e_rel,correction,structure),'bo')
     pylab.figure()
-    pylab.plot(numpy.tan(numpy.array(angle_from_min)/180.*numpy.pi),residual(bfparams,selected_fit_indices,selected_e_rel,correction),'ro')
+    pylab.plot(numpy.tan(numpy.array(angle_from_min)/180.*numpy.pi),residual(bfparams,selected_fit_indices,selected_e_rel,correction,structure),'ro')
     pylab.figure() 
     pylab.plot(angle_from_poleaxis,selected_e_rel,'bo')
 
@@ -490,7 +542,7 @@ def make2DGammaPlot(params,n=2,index0=[1,-1,0],poleaxis=[1,1,0],number_of_points
     energies = []    
     phis = [] 
 
-    for    theta in thetas:
+    for theta in thetas:
         phi = scipy.optimize.fsolve(dotProduct,0.8,args=(theta,index0))[0]
         phis.append(phi)
         #print theta, phi    
@@ -512,15 +564,15 @@ def dotProduct(phi,theta,nvector):
     return nvector[0]*sin(theta)*cos(phi)+nvector[1]*sin(theta)*sin(phi)+nvector[2]*cos(theta)
     
 
-def residual(p,x,y,c):
-    return (fitFunction(x,p,correction=c)-y)
+def residual(p,x,y,c,structure):
+    return (fitFunction(x,p,c,structure)-y)
 
-def equilShape(element,params,size=(10,10,10),distance=25.0):
+def equilShape(element,params,size=(10,10,10),distance=25.0,corrections=0,structure='fcc'):
     """
     this is to use the ratio of energies to calculate the equilibrium crystal shape, cycle through a bunch of (h,k,l) indices
     """
     slab = FaceCenteredCubic(element,directions=([[1,0,0],[0,1,0],[0,0,1]]),size=(10,10,10))    
-    energy100 = fitFunction([1,0,0],params)
+    energy100 = fitFunction([1,0,0],params,corrections,structure)
     h100 = distance
     orig_positions = slab.get_positions()
     kept_positions = list(orig_positions)
@@ -529,7 +581,7 @@ def equilShape(element,params,size=(10,10,10),distance=25.0):
         for k in range(0,9):
             for l in range(0,9):
                 nvector=list([h,k,l]/numpy.sqrt(h**2+k**2+l**2))
-                energyhkl = fitFunction(nvector,params)
+                energyhkl = fitFunction(nvector,params,corrections,structure)
                 distancehkl = energyhkl/energy100*h100
                 for i in range(0,len(kept_positions)):
                     list_to_pop = []
@@ -545,7 +597,7 @@ def equilShape(element,params,size=(10,10,10),distance=25.0):
 
     return new_slab
 
-def make3Dplot(indices,energies,params,sig_am=1/1000.,corrections=0):
+def make3Dplot(indices,energies,params,sig_am=1/1000.,corrections=0,structure='fcc'):
     """
     make a 3D plot of theoretical energies, and residuals saying how good the fit is
     """
@@ -554,7 +606,7 @@ def make3Dplot(indices,energies,params,sig_am=1/1000.,corrections=0):
     [phi,theta] = numpy.mgrid[0:pi+dphi*1.5:dphi,0:2*pi+dtheta*1.5:dtheta]
 
     plottingindices = [cos(phi)*sin(theta),sin(phi)*sin(theta),cos(theta)]
-    r = fitFunction(plottingindices,params,correction=corrections)
+    r = fitFunction(plottingindices,params,corrections,structure)
     x = r*cos(phi)*sin(theta)
     y = r*sin(phi)*sin(theta)
     z = r*cos(theta)
@@ -574,7 +626,7 @@ def make3Dplot(indices,energies,params,sig_am=1/1000.,corrections=0):
         xs.append(energ*cos(phiin)*sin(thein))
         ys.append(energ*sin(phiin)*sin(thein))
         zs.append(energ*cos(thein))
-        res.append(abs(energ - fitFunction([h,k,l],params,correction=corrections))/energ*sig_am) 
+        res.append(abs(energ - fitFunction([h,k,l],params,corrections,structure))/energ*sig_am) 
 
     print xs, ys, zs, res
 

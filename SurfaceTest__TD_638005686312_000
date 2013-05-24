@@ -20,7 +20,8 @@ lattice = raw_input()
 model = raw_input()
 
 TIME_CUTOFF = 300
-# in seconds 
+# in seconds
+# if a surface calculation exceeds TIME_CUTOFF skips that surface 
 
 def sweepSurfaces(calc):
 
@@ -81,15 +82,15 @@ def getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant):
     
     return E_unrelaxed, E_relaxed
 
-def fitBrokenBond(indices, energies, n=3, p0=[0.1,0.1,0.01,0.0],correction=1):
+def fitBrokenBond(indices, energies, structure, n=3, p0=[0.1,0.1,0.01,0.0],correction=1):
 
     indices = np.array(indices)
     
-    bfparams, cov_x, cost, range_error, max_error = fitSurfaceEnergies(indices,energies,n=n,p0=p0,correction=correction)     
+    bfparams, cov_x, cost, range_error, max_error = fitSurfaceEnergies(indices,energies,structure,n=n,p0=p0,correction=correction)     
 
-    return bfparams, range_error, max_error
+    return bfparams, cost, range_error, max_error
 
-def fitSubSetBrokenBond(sample_indices,indices,energies,n=3,p0=[0.1,0.1,0.01,0.0],correction=1):
+def fitSubSetBrokenBond(sample_indices,indices,energies,structure,n=3,p0=[0.1,0.1,0.01,0.0],correction=1):
     
     expandedIndices, expandedEnergies = expandList(indices, energies)
 
@@ -99,21 +100,21 @@ def fitSubSetBrokenBond(sample_indices,indices,energies,n=3,p0=[0.1,0.1,0.01,0.0
         curr_index = expandedIndices.index(ind)
         sample_energies.append(expandedEnergies[curr_index])
  
-    bfparams, range_error, max_error = fitBrokenBond(sample_indices, sample_energies, n=n, p0 = p0,correction=correction)
+    bfparams, cost, range_error, max_error = fitBrokenBond(sample_indices, sample_energies, structure, n=n, p0 = p0,correction=correction)
 
-    return bfparams, range_error, max_error
+    return bfparams
 
-def plotBrokenBondFit(indices,energies,bfparams,correction=1):
+def plotBrokenBondFit(indices,energies,bfparams,structure,correction=1):
    
     # modify to include three cyrstallographic zone cutoffs
     plotindices, plotenergies = expandList(indices,energies)
-    plotSubSet(plotindices,plotenergies,[1,-1,0],[1,1,0],bfparams,correction=correction)
+    plotSubSet(plotindices,plotenergies,[1,-1,0],[1,1,0],bfparams,structure = structure, correction=correction)
     pylab.savefig('BrokenBondFit1-10.png')
     pylab.clf()
-    plotSubSet(plotindices,plotenergies,[1,-1,2],[1,1,0],bfparams,correction=correction)
+    plotSubSet(plotindices,plotenergies,[1,-1,2],[1,1,0],bfparams,structure = structure, correction=correction)
     pylab.savefig('BrokenBondFit1-12.png')
     pylab.clf()
-    plotSubSet(plotindices,plotenergies,[1,1,-1],[0,1,1],bfparams,correction=correction)
+    plotSubSet(plotindices,plotenergies,[1,1,-1],[0,1,1],bfparams,structure = structure,correction=correction)
     pylab.savefig('BrokenBondFit11-1.png')
     pylab.clf()
 
@@ -180,19 +181,19 @@ print "calculator established"
 indices, energies, surfaceEnergyDict, calcTime = sweepSurfaces(calc)
 print "surfaces swept"
 if len(indices)>=4:
-    bfparams, range_error, max_error = fitBrokenBond(indices, energies)
-    plotBrokenBondFit(indices,energies,bfparams)
+    bfparams, cost, range_error, max_error = fitBrokenBond(indices, energies, lattice)
+    plotBrokenBondFit(indices,energies,bfparams,lattice)
 
     # fit the minimum subset and see how well it does
     samplelist = [[1,1,1],[1,0,0],[1,1,2],[1,0,1]] 
-    subbfparams, subrange, submax_error = fitSubSetBrokenBond(samplelist,indices, energies)
+    subbfparams = fitSubSetBrokenBond(samplelist,indices,energies,lattice)
+    subfitcost = np.sum(abs(residual(subbfparams,numpy.array(indices),energies,1,lattice)/energies))/len(indices)/cost
 else:
     bfparams = None
     range_error = None
     max_error = None
     subbfparams = None
-    subrange=None
-    submax_error = None
+    subfitcost = None
 
 # dump all the stuff we calculated into one large dictionary
 if bfparams!=None:
@@ -202,7 +203,7 @@ if bfparams!=None:
         'CorrectionParameter':bfparams[3],
         'Error/Range(%)':range_error,
         'Max Residual(%)':max_error,
-        'Subset prediction Quality': submax_error, 
+        'Subset prediction Quality': subfitcost, 
         "BrokenBondFitPlot1-10": "@FILE[BrokenBondFit1-10.png]",
         "BrokenBondFitPlot1-12": "@FILE[BrokenBondFit1-12.png]",
         "BrokenBondFitPlot11-1": "@FILE[BrokenBondFit11-1.png]",
