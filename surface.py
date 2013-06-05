@@ -96,6 +96,19 @@ def makeSurface(symbol,structure,indices,size=(1,1,1),tol=1e-10,lattice_const=No
 
     return surface
 
+def getSurfaceVector(surface):
+    try:
+        atoms = np.where(surface.positions[:,2] == 0)[0]
+        v0 = surface.positions[atoms[0]]
+        v1 = surface.positions[atoms[1]] - v0
+        v2 = surface.positions[atoms[2]] - v0
+        a = np.sqrt(v1.dot(v1))
+        b = np.sqrt(v2.dot(v2))
+        theta = np.arccos(np.fabs(v1.dot(v2)) / (a*b)) * 180.0/ np.pi 
+        return {"a": a, "b": b, "alpha": theta}
+    except Exception as e:
+        return {"a": 0, "b", 0, "alpha", 0}
+
 def build(lattice, basis, size, tol):
     """
     to build lattice structure, can make surface or bulk depending on pbc

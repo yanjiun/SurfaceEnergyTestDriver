@@ -18,22 +18,26 @@ import time
 symbol = raw_input()
 lattice = raw_input()
 model = raw_input()
+latticeconstant_global = 0
 
 TIME_CUTOFF = 300
 # in seconds
 # if a surface calculation exceeds TIME_CUTOFF skips that surface 
 
 def sweepSurfaces(calc):
-
+    global latticeconstant_global 
     surfaceEnergyDict = {}
+    surfaceLatticeVects = {}
     energies=[]
     indices_calculated=[]
     file = open('IndexList.pkl','r')
     list_of_indices = pickle.load(file)
     file.close()
     # list of indices for testing
-    #list_of_indices = [[1,1,1],[1,0,0],[1,2,1],[1,1,0],[1,8,9],[2,5,7]]
+    #list_of_indices = [[1,1,1],[1,0,0],[1,2,1],[1,1,0]]#,[1,8,9],[2,5,7]]
     latticeconstant = findLatticeConstant(calc)
+    latticeconstant_global = latticeconstant
+
     atoms = bulk(symbol,lattice,a=latticeconstant)
     atoms.set_calculator(calc)
     unit_e_bulk = atoms.get_potential_energy()/atoms.get_number_of_atoms()
@@ -49,7 +53,7 @@ def sweepSurfaces(calc):
         miller = [1,0,0]
     else:
         miller = [1,0,0]
-    E_unrelaxed, E_relaxed = getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant)
+    E_unrelaxed, E_relaxed, surf_lattice_vect = getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant)
     signal.alarm(0)
     end_time = time.time()
     calcTime = end_time - start_time
@@ -59,8 +63,9 @@ def sweepSurfaces(calc):
         signal.alarm(TIME_CUTOFF)
         try:
             print miller
-            E_unrelaxed, E_relaxed = getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant)
-            surfaceEnergyDict['Surface Energy ' +str(miller)] = E_relaxed
+            E_unrelaxed, E_relaxed, surf_lattice_vect = getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant)
+            surfaceEnergyDict[tuple(miller)] = E_relaxed
+            surfaceLatticeVects[tuple(miller)] = surf_lattice_vect 
             energies.append(E_relaxed)
             indices_calculated.append(miller)   
         except TimeoutException:
@@ -68,11 +73,12 @@ def sweepSurfaces(calc):
         except:
             raise
         signal.alarm(0)     
-    return indices_calculated, np.array(energies), surfaceEnergyDict, calcTime
+    return indices_calculated, np.array(energies), surfaceEnergyDict, calcTime, surfaceLatticeVects
 
 def getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant):
     
     surf = makeSurface(symbol,lattice,miller,size = (3, 3, 10),lattice_const=latticeconstant)
+    surfvector = getSurfaceVector(surf)
     e_unrelaxed, e_relaxed = surface_energy(surf, calc)
     e_bulk = unit_e_bulk*surf.get_number_of_atoms()
     surface_vector = np.cross(surf.cell[0],surf.cell[1])
@@ -80,7 +86,7 @@ def getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant):
     E_unrelaxed = (e_unrelaxed-e_bulk)/(2*surface_area)
     E_relaxed = (e_relaxed-e_bulk)/(2*surface_area)
     
-    return E_unrelaxed, E_relaxed
+    return E_unrelaxed, E_relaxed, surfvector
 
 def fitBrokenBond(indices, energies, structure, n=3, p0=[0.1,0.1,0.01,0.0],correction=1):
 
@@ -178,7 +184,7 @@ class TimeoutException(Exception):
 
 calc = KIMCalculator(model)
 print "calculator established"
-indices, energies, surfaceEnergyDict, calcTime = sweepSurfaces(calc)
+indices, energies, surfaceEnergyDict, calcTime, surfaceVectorDict = sweepSurfaces(calc)
 print "surfaces swept"
 if len(indices)>=4:
     bfparams, cost, range_error, max_error = fitBrokenBond(indices, energies, lattice)
@@ -195,25 +201,87 @@ else:
     subbfparams = None
     subfitcost = None
 
+
+#=======================================================
+# formatting the output for pipeline integration
+#=======================================================
+def getFileInfo(filename):
+    import os, hashlib
+    dct = {}
+    abspath = os.path.abspath(filename)
+    dct['filename'] = filename
+    dct['path'] = os.path.dirname(abspath)
+    dct['extension'] = os.path.splitext(filename)[1]
+    dct['size'] = os.path.getsize(abspath)
+    dct['created'] = os.path.getctime(abspath)
+    dct['hash'] = hashlib.md5(open(abspath, 'rb').read()).hexdigest()
+    dct['desc'] = "Plot of the broken bond fit"
+    return dct
+
+latex_forms = {
+        'fcc': "E_{FCC} (\\vec{n}) = p_1 (4 \left( |x+y| + |x-y| + |x+z| + |x-z| + |z+y| +|z-y|\\right)) + p_2 (8 \left( |x| + |y| + |z|\\right))  + p_3 (2 ( |x+ 2y + z| + |x+2y-z| + |x-2y + z| + |x-2y-z| + |2x+y+z| + |2x+y-z| +|2x-y+z| +|2x-y-z| +|x+y+2z| +|x+y-2z| +|x-y+2z| +|x-y-2z| ) + c", 
+        'bcc': "E_{BCC} (\\vec{n}) = p_1 (6 \left( | x+y+z| + |x+y-z| + |-x+y-z| + |x-y+z| \\right)) + p_2 (8 \left( |x| + |y| + |z|\\right)) + p_3 (4 \left( |x+y| + |x-y| + |x+z| + |x-z| + |z+y| +|z-y|\\right)) +c"
+        }
+
+python_forms = {
+    'fcc':
+    """
+    def BrokenBondFCC(params, index):
+
+        import numpy
+        x, y, z = index
+        x = x / numpy.sqrt(x**2.+y**2.+z**2.)
+        y = y / numpy.sqrt(x**2.+y**2.+z**2.)
+        z = z / numpy.sqrt(x**2.+y**2.+z**2.)
+
+        return params[0]*4* (abs(x+y) + abs(x-y) + abs(x+z) + abs(x-z) + abs(z+y) + abs(z-y)) + params[1]*8*(abs(x) + abs(y) + abs(z)) + params[2]*(abs(x+2*y+z) + abs(x+2*y-z) +abs(x-2*y+z) +abs(x-2*y-z) + abs(2*x+y+z) +abs(2*x+y-z) +abs(2*x-y+z) +abs(2*x-y-z) + abs(x+y+2*z) +abs(x+y-2*z) +abs(x-y+2*z) +abs(x-y-2*z))+params[3]
+     """,
+
+     'bcc':
+     """
+     def BrokenBondBCC(params, x, y, z):
+
+         import numpy
+         x, y, z = index
+         x = x / numpy.sqrt(x**2.+y**2.+z**2.)
+         y = y / numpy.sqrt(x**2.+y**2.+z**2.)
+         z = z / numpy.sqrt(x**2.+y**2.+z**2.)
+
+         return params[0]*6*(abs(x+y+z) + abs(x-y-z) + abs(x-y+z) + abs(x+y-z)) + params[1]*8*(abs(x) + abs(y) + abs(z)) + params[2]*4* (abs(x+y) + abs(x-y) + abs(x+z) + abs(x-z) + abs(z+y) + abs(z-y)) + params[3] 
+     """
+     }
+
+energies = []
+for key,val in surfaceEnergyDict.iteritems():
+    energies.append({"miller_index": key, "surface_energy": val, "surface": surfaceVectorDict[key]})
+
+plotfiles = []
+for name in ["BrokenBondFit1-10.png", "BrokenBondFit1-12.png", "BrokenBondFit11-1.png"]:
+    plotfiles.append(getFileInfo(name))
+
 # dump all the stuff we calculated into one large dictionary
 if bfparams!=None:
-    resultsFirstHalf = {'BrokenBondParameter(110)': bfparams[0], \
-        'BrokenBondParameter(100)':bfparams[1], \
-        'BrokenBondParameter(112)':bfparams[2], \
+    results = {'BrokenBond_P1': bfparams[0], \
+        'BrokenBond_P2':bfparams[1], \
+        'BrokenBond_P3':bfparams[2], \
         'CorrectionParameter':bfparams[3],
-        'Error/Range(%)':range_error,
-        'Max Residual(%)':max_error,
-        'Subset prediction Quality': subfitcost, 
-        "BrokenBondFitPlot1-10": "@FILE[BrokenBondFit1-10.png]",
-        "BrokenBondFitPlot1-12": "@FILE[BrokenBondFit1-12.png]",
-        "BrokenBondFitPlot11-1": "@FILE[BrokenBondFit11-1.png]",
-        "calculationTimeForTestSurface" : calcTime\
-        }
+        'ErrorRange':range_error,
+        'MaxResidual':max_error,
+        'SubsetPredictionQuality': subfitcost, 
+
+        "calculationTimeForTestSurface" : calcTime,
+        "crystal_structure": lattice,
+        "element": symbol,
+        "lattice_constant": latticeconstant_global,
+        "formula_latex": latex_forms[lattice],
+        "formula_python": python_forms[lattice],
+
+        "plotfiles": plotfiles,
+        "energies": energies}
 else:
-    resultsFirstHalf = {"calculationTimeForTestSurface":calcTime,\
-         "message from test":"not enough surface energy results for fit"}
+    results = {"calculationTimeForTestSurface":calcTime,\
+         "message from test":"not enough surface energy results for fit",
+         "energies": energies}
 
-results = dict(resultsFirstHalf.items()+surfaceEnergyDict.items())
 print simplejson.dumps(results)
-
 sys.exit(0)
