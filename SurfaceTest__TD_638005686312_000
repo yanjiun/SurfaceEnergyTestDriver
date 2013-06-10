@@ -78,14 +78,14 @@ def sweepSurfaces(calc):
 def getSurfaceEnergy(miller, calc, unit_e_bulk, latticeconstant):
     
     surf = makeSurface(symbol,lattice,miller,size = (3, 3, 10),lattice_const=latticeconstant)
-    surfvector = getSurfaceVector(surf)
     e_unrelaxed, e_relaxed = surface_energy(surf, calc)
     e_bulk = unit_e_bulk*surf.get_number_of_atoms()
     surface_vector = np.cross(surf.cell[0],surf.cell[1])
     surface_area = np.sqrt(np.dot(surface_vector,surface_vector))
     E_unrelaxed = (e_unrelaxed-e_bulk)/(2*surface_area)
     E_relaxed = (e_relaxed-e_bulk)/(2*surface_area)
-    
+    surfvector = getSurfaceVector(surf)
+ 
     return E_unrelaxed, E_relaxed, surfvector
 
 def fitBrokenBond(indices, energies, structure, n=3, p0=[0.1,0.1,0.01,0.0],correction=1):

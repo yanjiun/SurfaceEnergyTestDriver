@@ -98,16 +98,37 @@ def makeSurface(symbol,structure,indices,size=(1,1,1),tol=1e-10,lattice_const=No
 
 def getSurfaceVector(surface):
     try:
-        atoms = np.where(surface.positions[:,2] == 0)[0]
-        v0 = surface.positions[atoms[0]]
-        v1 = surface.positions[atoms[1]] - v0
-        v2 = surface.positions[atoms[2]] - v0
+        #atoms = np.where(surface.positions[:,2] == 0)[0]
+        #v0 = surface.positions[atoms[0]]
+        v1 = surface.get_cell()[0]
+        v2 = surface.get_cell()[1]
+        #v1 = surface.positions[atoms[1]] - v0
+        #v2 = surface.positions[atoms[2]] - v0
         a = np.sqrt(v1.dot(v1))
         b = np.sqrt(v2.dot(v2))
-        theta = np.arccos(np.fabs(v1.dot(v2)) / (a*b)) * 180.0/ np.pi 
-        return {"a": a, "b": b, "alpha": theta}
+        theta = np.arccos(np.fabs(v1.dot(v2)) / (a*b)) * 180.0/ np.pi
+        wyckoffs = getWyckoffSites(surface)
+        list_dicts_wyckoffs = [{'fract_x':w[0],'fract_y':w[1],'frac_z':w[2]} for w in wyckoffs] 
+        return {"a": a, "b": b, "alpha": theta, "wyckoff_positions":list_dicts_wyckoffs}
     except Exception as e:
-        return {"a": 0, "b", 0, "alpha", 0}
+        return {"a": 0, "b": 0, "alpha": 0, "wyckoff_positions":0}
+
+def getWyckoffSites(surface):
+    """
+    returns WyckoffSites
+    """  
+    cell_vects = surface.get_cell()
+    v1 = cell_vects[0]
+    v2 = cell_vects[1]
+    a = np.sqrt(v1.dot(v1))
+    b = np.sqrt(v2.dot(v2))
+    positions = surface.get_positions()    
+    fractas = positions.dot(v1)/a
+    fractbs = positions.dot(v2)/b
+    zs = positions[:,2]
+    fract_positions = np.vstack((fractas,fractbs,zs)).transpose()    
+     
+    return fract_positions
 
 def build(lattice, basis, size, tol):
     """
